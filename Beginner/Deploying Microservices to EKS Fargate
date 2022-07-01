@@ -1,0 +1,82 @@
+Create a Fargate profile:
+---------------------------------
+eksctl create fargateprofile \
+  --cluster eksworkshop-eksctl \
+  --name game-2048 \
+  --namespace game-2048
+
+To check if the cluster-profile is created:
+-----------------------------------
+eksctl get fargateprofile \
+  --cluster eksworkshop-eksctl \
+  -o yaml
+
+Create IAM OIDC provider:
+-------------------------
+eksctl utils associate-iam-oidc-provider \
+    --region ${AWS_REGION} \
+    --cluster eksworkshop-eksctl \
+    --approve
+
+Create an IAM policy:
+---------------------
+curl -o iam_policy.json https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.2.0/docs/install/iam_policy.json
+aws iam create-policy \
+    --policy-name AWSLoadBalancerControllerIAMPolicy \
+    --policy-document file://iam_policy.json
+rm iam_policy.json
+
+Create a IAM role and ServiceAccount for the Load Balancer controller:
+----------------------------------------------------------------------
+eksctl create iamserviceaccount \
+  --cluster eksworkshop-eksctl \
+  --namespace kube-system \
+  --name aws-load-balancer-controller \
+  --attach-policy-arn arn:aws:iam::${ACCOUNT_ID}:policy/AWSLoadBalancerControllerIAMPolicy \
+  --override-existing-serviceaccounts \
+  --approve
+
+To check sa:
+-------------
+kubectl get sa aws-load-balancer-controller -n kube-system -o yaml
+
+Deploy the sample application:
+-------------------------------
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/docs/examples/2048/2048_full.yaml
+
+Check Deployment is completed:
+------------------------------
+kubectl -n game-2048 rollout status deployment deployment-2048
+
+Check Ingress is available:
+-----------------------------
+kubectl get ingress/ingress-2048 -n game-2048
+
+Get Ingress DNS:
+-----------------
+export FARGATE_GAME_2048=$(kubectl get ingress/ingress-2048 -n game-2048 -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+
+echo "http://${FARGATE_GAME_2048}"
+
+Cleaning up Activity:
+----------------------
+kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/docs/examples/2048/2048_full.yaml
+
+helm uninstall aws-load-balancer-controller \
+    -n kube-system
+
+eksctl delete iamserviceaccount \
+    --cluster eksworkshop-eksctl \
+    --name aws-load-balancer-controller \
+    --namespace kube-system \
+    --wait
+
+aws iam delete-policy \
+    --policy-arn arn:aws:iam::${ACCOUNT_ID}:policy/AWSLoadBalancerControllerIAMPolicy
+
+kubectl delete -k github.com/aws/eks-charts/stable/aws-load-balancer-controller//crds?ref=master
+
+eksctl delete fargateprofile \
+  --name game-2048 \
+  --cluster eksworkshop-eksctl
+
