@@ -2,20 +2,19 @@
 
 #1. Install Kubectl:
 
-	sudo curl --silent --location -o /usr/local/bin/kubectl \
-	   https://amazon-eks.s3.us-west-2.amazonaws.com/1.19.6/2021-01-05/bin/linux/amd64/kubectl
-
-	sudo chmod +x /usr/local/bin/kubectl
+    sudo curl --silent --location -o /usr/local/bin/kubectl \
+    https://amazon-eks.s3.us-west-2.amazonaws.com/1.19.6/2021-01-05/bin/linux/amd64/kubectl
+    sudo chmod +x /usr/local/bin/kubectl
 
 #2. Update AWS CLI:
 
-	curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-	unzip awscliv2.zip
-	sudo ./aws/install
+    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+    unzip awscliv2.zip
+    sudo ./aws/install
 
 #3. Install jq, envsubst (from GNU gettext utilities) and bash-completion
 
-	sudo yum -y install jq gettext bash-completion moreutils
+    sudo yum -y install jq gettext bash-completion moreutils
 
 #4. Install yq for yaml processing
 
