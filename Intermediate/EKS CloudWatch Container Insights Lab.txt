@@ -1,0 +1,131 @@
+EKS Cloudwatch Container Insights lab:
+
+HELM is mandatory for this lab:
+===========
+
+Install HELM cli:
+-------------------
+curl -sSL https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
+
+helm version --short
+
+
+helm completion bash >> ~/.bash_completion
+. /etc/profile.d/bash_completion.sh
+. ~/.bash_completion
+source <(helm completion bash)
+
+======================
+LAB starts here:
+================
+# Create a namespace wordpress
+kubectl create namespace wordpress-cwi
+
+# Add the bitnami Helm Charts Repository
+helm repo add bitnami https://charts.bitnami.com/bitnami
+
+# Deploy WordPress in its own namespace
+helm -n wordpress-cwi install understood-zebu bitnami/wordpress
+
+(This will create 2 PVC, Multiple Secrets, 1 Deployment for wordpress, 1 SS for MariaDB)
+
+Check the status of the deployment:
+-----------------------------------
+kubectl -n wordpress-cwi rollout status deployment understood-zebu-wordpress
+
+
+To access the Wordpress URL:
+-------------------------------
+export SERVICE_URL=$(kubectl get svc -n wordpress-cwi understood-zebu-wordpress --template "{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}")
+
+echo "Public URL: http://$SERVICE_URL/"
+
+Testing the Wordpress Admin Interface:
+--------------------------------------
+export ADMIN_URL="http://$SERVICE_URL/admin"
+export ADMIN_PASSWORD=$(kubectl get secret --namespace wordpress-cwi understood-zebu-wordpress -o jsonpath="{.data.wordpress-password}" | base64 --decode)
+
+echo "Admin URL: http://$SERVICE_URL/admin
+Username: user
+Password: $ADMIN_PASSWORD
+"
+
+
+(You should be able to get wordpress admin page - Login & check to access the interface)
+
+Setup CloudWatch Agent on the Cluster:
+----------------------------------------
+
+First, we check if a role is attached to our WorkerNodes in the env.
+
+test -n "$ROLE_NAME" && echo ROLE_NAME is "$ROLE_NAME" || echo ROLE_NAME is not set
+
+
+If not set use the below to setup:
+-------------------------
+STACK_NAME=$(eksctl get nodegroup --cluster eksworkshop-eksctl -o json | jq -r '.[].StackName')
+ROLE_NAME=$(aws cloudformation describe-stack-resources --stack-name $STACK_NAME | jq -r '.StackResources[] | select(.ResourceType=="AWS::IAM::Role") | .PhysicalResourceId')
+echo "export ROLE_NAME=${ROLE_NAME}" | tee -a ~/.bash_profile
+
+
+-----------------------
+Cloudwatch Agent needs to have a CloudwatchAgentServerPolicy attached to the role to work. This Policy will help it to push data/logs to cloudwatch
+
+aws iam attach-role-policy \
+  --role-name $ROLE_NAME \
+  --policy-arn arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+
+
+Verification:
+-----
+aws iam list-attached-role-policies --role-name $ROLE_NAME | grep CloudWatchAgentServerPolicy || echo 'Policy not found'
+
+Installing Cloudwatch Agent:
+------------------------------
+curl -s https://raw.githubusercontent.com/aws-samples/amazon-cloudwatch-container-insights/latest/k8s-deployment-manifest-templates/deployment-mode/daemonset/container-insights-monitoring/quickstart/cwagent-fluentd-quickstart.yaml | sed "s/{{cluster_name}}/eksworkshop-eksctl/;s/{{region_name}}/${AWS_REGION}/" | kubectl apply -f -
+
+
+The above will create:
+NS, SA, ClusterRole, ClusterRoleBinding
+Deploy Cloudwatch Agent as a DaemonSet
+Deploy Fluentd as daemonset(responsible to send logs to CW agent)
+Deploy Config for both DS.
+
+
+To check the objects:
+-----------------
+kubectl -n amazon-cloudwatch get daemonsets
+
+-------
+Verification:
+-----------------
+echo "
+Use the URL below to access Cloudwatch Container Insights in $AWS_REGION:
+
+https://console.aws.amazon.com/cloudwatch/home?region=${AWS_REGION}#cw:dashboard=Container;context=~(clusters~'eksworkshop-eksctl~dimensions~(~)~performanceType~'Service)"
+
+
+Load Test on the Cluster:
+--------------------
+
+Install Siege:
+
+sudo yum install siege -y
+
+siege --version
+
+
+Performing Load Test:
+---------------------
+export WP_ELB=$(kubectl -n wordpress-cwi get svc understood-zebu-wordpress -o jsonpath="{.status.loadBalancer.ingress[].hostname}")
+
+siege -q -t 15S -c 200 -i http://${WP_ELB}
+
+
+(Here this command tells Siege to run 200 concurrent connections to your Wordpress site at varying URLS for 15 seconds.)
+
+
+-------
+Now the cloudwatch containers Insights console will be used to check the updated metrics.
+----------
+End of lab.
