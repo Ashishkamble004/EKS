@@ -1,0 +1,38 @@
+1.  Upgrade EKS Control Plane 
+
+    a. To Perform Checks for the Next Version
+        eksctl upgrade cluster --name=eksworkshop-eksctl
+
+        [ℹ]  eksctl version 0.66.0
+        [ℹ]  using region us-west-2
+        [ℹ]  (plan) would upgrade cluster "eksworkshop-eksctl" control plane from current version "1.20" to "1.21"
+        [ℹ]  re-building cluster stack "eksctl-eksworkshop-eksctl-cluster"
+        [✔]  all resources in cluster stack "eksctl-eksworkshop-eksctl-cluster" are up-to-date
+        [ℹ]  checking security group configuration for all nodegroups
+        [ℹ]  all nodegroups have up-to-date configuration
+        [!]  no changes were applied, run again with '--approve' to apply the changes
+
+    b. To Perform Actual Upgrade of the ControlPlane
+
+        eksctl upgrade cluster --name=eksworkshop-eksctl --approve
+
+2.  Upgrade EKS Core Add-ons  (Only After the ControlPlane is upgraded)
+
+    a. eksctl utils update-kube-proxy --cluster=eksworkshop-eksctl --approve
+    b. eksctl utils update-coredns --cluster=eksworkshop-eksctl --approve
+
+    Confirm their Versions:
+    kubectl get daemonset kube-proxy --namespace kube-system -o=jsonpath='{$.spec.template.spec.containers[:1].image}'
+    kubectl describe deployment coredns --namespace kube-system | grep Image | cut -d "/" -f 3
+
+3.  Upgrade Managed Node Group 
+
+    a. If we are using Cluster AutoScaler, we will scale it back to 0, to avoid launches of new Nodes during Upgrade Process
+
+        kubectl scale deployments/cluster-autoscaler --replicas=0 -n kube-system
+
+    b. Trigger the Managed Node Group Upgrade Process:
+
+        eksctl upgrade nodegroup --name=nodegroup --cluster=eksworkshop-eksctl --kubernetes-version=1.21
+
+    c. In Another Tab: kubectl get nodes --watch
